@@ -1,0 +1,97 @@
+openapi: 3.0.3
+info:
+  title: External Pricing API
+  version: 1.0.0
+  description: Contract supplied by the external pricing provider.
+servers:
+  - url: http://localhost:8090
+paths:
+  /health:
+    get:
+      summary: Health endpoint
+      responses:
+        '200':
+          description: Service is running
+  /v1/products:
+    get:
+      summary: List product identifiers available in the challenge environment
+      responses:
+        '200':
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  products:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        productId:
+                          type: string
+                        name:
+                          type: string
+  /v1/prices/{productId}:
+    get:
+      summary: Request a price quote
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: country
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z]{2}$'
+        - in: query
+          name: currency
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z]{3}$'
+      responses:
+        '200':
+          description: Price quote
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceQuote'
+        '400':
+          description: Invalid request
+        '404':
+          description: Product not found
+        '4XX':
+          description: The provider may reject requests for operational reasons
+        '5XX':
+          description: The provider may fail to process a request
+components:
+  schemas:
+    PriceQuote:
+      type: object
+      required:
+        - quoteId
+        - productId
+        - country
+        - amount
+        - currency
+        - validUntil
+      properties:
+        quoteId:
+          type: string
+        productId:
+          type: string
+        country:
+          type: string
+        amount:
+          type: string
+          example: '19.99'
+        currency:
+          type: string
+          example: EUR
+        validUntil:
+          type: string
+          format: date-time

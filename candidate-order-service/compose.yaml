@@ -1,0 +1,5 @@
+services:
+  pricing-api:
+    image: ${PRICING_API_IMAGE:-eduardosassegdcbrazil/tsystems-pricing-api:1.0}
+    ports:
+      - "8090:8080"

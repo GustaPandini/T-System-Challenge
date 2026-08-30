@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>International Order Service</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}" href="/css/app.css">
+</head>
+<body>
+<header class="site-header">
+    <div class="container header-content">
+        <div>
+            <p class="eyebrow">T-Systems developer challenge</p>
+            <h1>International Order Service</h1>
+            <p class="subtitle">Create orders and observe how pricing affects their state.</p>
+        </div>
+        <form method="get" action="/" class="refresh-form">
+            <button class="button button-secondary" type="submit">Refresh orders</button>
+        </form>
+    </div>
+</header>
+
+<main class="container main-grid">
+    <section class="panel create-panel" aria-labelledby="new-order-heading">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Store operation</p>
+                <h2 id="new-order-heading">Create an order</h2>
+            </div>
+        </div>
+
+        <div class="alert alert-success" th:if="${createdOrderId != null}" role="status">
+            <strong>Order accepted.</strong>
+            Stable order ID:
+            <code th:text="${createdOrderId}">00000000-0000-0000-0000-000000000000</code>
+        </div>
+
+        <div class="alert alert-error" th:if="${integrationError != null}" role="alert">
+            <strong>Order was not accepted.</strong>
+            <span th:text="${integrationError}">The order could not be accepted.</span>
+        </div>
+
+        <form class="order-form" method="post" th:action="@{/ui/orders}" th:object="${orderForm}">
+            <div class="field field-wide">
+                <label for="customerId">Customer ID</label>
+                <input id="customerId" type="text" th:field="*{customerId}" required autocomplete="off">
+                <p class="field-error" th:if="${#fields.hasErrors('customerId')}" th:errors="*{customerId}">Invalid customer ID</p>
+            </div>
+
+            <div class="field field-wide">
+                <label for="productId">Product ID</label>
+                <input id="productId" type="text" th:field="*{productId}" required autocomplete="off" aria-describedby="product-help">
+                <p class="field-help" id="product-help">Use a product exposed by the provider's <code>/v1/products</code> endpoint.</p>
+                <p class="field-error" th:if="${#fields.hasErrors('productId')}" th:errors="*{productId}">Invalid product ID</p>
+            </div>
+
+            <div class="field">
+                <label for="quantity">Quantity</label>
+                <input id="quantity" type="number" min="1" max="100" th:field="*{quantity}" required>
+                <p class="field-error" th:if="${#fields.hasErrors('quantity')}" th:errors="*{quantity}">Invalid quantity</p>
+            </div>
+
+            <div class="field">
+                <label for="country">Country</label>
+                <input id="country" type="text" maxlength="2" pattern="[A-Z]{2}" th:field="*{country}" required autocomplete="off">
+                <p class="field-help">ISO 3166-1 alpha-2, e.g. DE.</p>
+                <p class="field-error" th:if="${#fields.hasErrors('country')}" th:errors="*{country}">Invalid country</p>
+            </div>
+
+            <div class="field">
+                <label for="currency">Currency</label>
+                <input id="currency" type="text" maxlength="3" pattern="[A-Z]{3}" th:field="*{currency}" required autocomplete="off">
+                <p class="field-help">ISO 4217, e.g. EUR.</p>
+                <p class="field-error" th:if="${#fields.hasErrors('currency')}" th:errors="*{currency}">Invalid currency</p>
+            </div>
+
+            <div class="form-actions field-wide">
+                <button class="button" type="submit">Submit order</button>
+            </div>
+        </form>
+    </section>
+
+    <aside class="summary" aria-label="Order summary">
+        <article class="metric">
+            <span class="metric-label">Orders</span>
+            <strong class="metric-value" th:text="${orderCount}">0</strong>
+        </article>
+        <article class="metric">
+            <span class="metric-label">Confirmed</span>
+            <strong class="metric-value" th:text="${confirmedCount}">0</strong>
+        </article>
+        <article class="metric">
+            <span class="metric-label">Needs attention</span>
+            <strong class="metric-value" th:text="${attentionCount}">0</strong>
+        </article>
+        <article class="metric">
+            <span class="metric-label">Without price</span>
+            <strong class="metric-value" th:text="${unpricedCount}">0</strong>
+        </article>
+    </aside>
+
+    <section class="panel orders-panel" aria-labelledby="orders-heading">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Operational view</p>
+                <h2 id="orders-heading">Orders</h2>
+            </div>
+            <p>Use this view to make pricing state and recovery behavior understandable to a store or support user.</p>
+        </div>
+
+        <div class="empty-state" th:if="${#lists.isEmpty(orders)}">
+            <strong>No orders yet.</strong>
+            <p>Create an order above to see how it is represented here.</p>
+        </div>
+
+        <div class="table-wrap" th:unless="${#lists.isEmpty(orders)}">
+            <table>
+                <thead>
+                <tr>
+                    <th scope="col">Status</th>
+                    <th scope="col">Order</th>
+                    <th scope="col">Customer</th>
+                    <th scope="col">Product</th>
+                    <th scope="col">Market</th>
+                    <th scope="col">Qty</th>
+                    <th scope="col">Unit price</th>
+                    <th scope="col">Total</th>
+                    <th scope="col">Created</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="order : ${orders}">
+                    <td>
+                        <span class="status" th:classappend="${order.status.name() == 'CONFIRMED'} ? ' status-confirmed' : ' status-attention'"
+                              th:text="${order.status}">CONFIRMED</span>
+                    </td>
+                    <td><code class="order-id" th:text="${order.id}">order-id</code></td>
+                    <td th:text="${order.customerId}">customer-42</td>
+                    <td th:text="${order.productId}">SKU-1001</td>
+                    <td><span th:text="${order.country}">DE</span> / <span th:text="${order.currency}">EUR</span></td>
+                    <td th:text="${order.quantity}">1</td>
+                    <td>
+                        <span th:if="${order.unitPrice != null}" th:text="|${order.unitPrice} ${order.currency}|">19.99 EUR</span>
+                        <span class="not-available" th:unless="${order.unitPrice != null}">Not priced</span>
+                    </td>
+                    <td>
+                        <span th:if="${order.totalPrice != null}" th:text="|${order.totalPrice} ${order.currency}|">19.99 EUR</span>
+                        <span class="not-available" th:unless="${order.totalPrice != null}">—</span>
+                    </td>
+                    <td><time th:datetime="${order.createdAt}" th:text="${order.createdAt}">2026-08-14T10:00:00Z</time></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</main>
+</body>
+</html>

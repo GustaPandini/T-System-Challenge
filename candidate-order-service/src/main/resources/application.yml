@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: international-order-service
+server:
+  port: 8080
+
+pricing:
+  api:
+    url: ${PRICING_API_URL:http://localhost:8090}
