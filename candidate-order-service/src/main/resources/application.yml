@@ -7,3 +7,7 @@ server:
 pricing:
   api:
     url: ${PRICING_API_URL:http://localhost:8090}
+    # Most SKUs answer in ~6ms, but SKU-1003 consistently takes 3.51s.
+    # The read timeout must sit above that, or a valid product can never be priced.
+    connect-timeout: 2s
+    read-timeout: 5s

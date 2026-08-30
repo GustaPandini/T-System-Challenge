@@ -1,5 +1,70 @@
 # T-Systems International Developer Challenge
 
+---
+
+# Running this solution
+
+Requires Java 21+, Maven 3.9+ and Docker.
+
+```bash
+# 1. start the external Pricing API
+docker run --rm --name pricing-api -p 8090:8080 eduardosassegdcbrazil/tsystems-pricing-api:1.0
+
+# 2. in another terminal, start the application
+mvn spring-boot:run
+```
+
+Dashboard: <http://localhost:8080/> · REST API: `/api/orders`
+
+Tests do not need Docker — the Pricing API is stubbed and the HTTP client is tested against a
+local server started by the test itself:
+
+```bash
+mvn test
+```
+
+## Reproducing each pricing state
+
+The Pricing API is deterministic: the behaviour depends on the product **and on how many times it
+has already been called**. Restart the container to reset it and replay any scenario.
+
+| Submit this product | You get | Because |
+|---|---|---|
+| `SKU-1001` | **Priced** | always answers correctly |
+| `SKU-1003` | **Priced**, after ~3.5s | this product is deliberately slow |
+| `SKU-1002` | **Awaiting price** → *Retry pricing* twice → **Priced** | fails the first two calls with `503` |
+| `SKU-1004` | **Awaiting price** → *Retry pricing* twice → **Priced** | rate-limits the first two calls with `429` |
+| `SKU-1008` | **Priced** | drops the connection on the first call when probed with `curl`, but the application still prices it — see `DECISIONS.md` |
+| `SKU-1007` | alternates **Awaiting price** / **Priced** on every attempt | omits the required `amount` field every other call |
+| `SKU-1005` | **Needs attention** | answers in a different currency than the one requested |
+| `SKU-9999` | **Needs attention** | product does not exist |
+
+For a full outage, stop the container (`docker stop pricing-api`) and submit an order: it is still
+accepted with a stable ID and lands in **Awaiting price**.
+
+## Endpoints added to the starter
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/orders/{id}/retry` | retry pricing an order; no-op unless it is awaiting price |
+| `POST /ui/orders/{id}/retry` | same action from the dashboard (plain HTML form) |
+| `POST /ui/orders/retry-pending` | retry every order awaiting price at once |
+
+`POST /api/orders` still returns `201` — now with a `Location` header — and the pricing state
+travels in the response body, never in the status code.
+
+## Configuration
+
+| Property | Default | |
+|---|---|---|
+| `pricing.api.url` | `http://localhost:8090` | override with the `PRICING_API_URL` env var |
+| `pricing.api.connect-timeout` | `2s` | |
+| `pricing.api.read-timeout` | `5s` | must stay above `SKU-1003`'s ~3.5s response |
+
+Design decisions, assumptions and known limitations are in [`DECISIONS.md`](DECISIONS.md).
+
+---
+
 ## Context
 
 You have joined a team that maintains an Order Management service for an international retail customer. The application already exists and is in use by other developers. Your task is to understand the codebase, introduce a new integration, and make engineering decisions when requirements and dependencies are imperfect.

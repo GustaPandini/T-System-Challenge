@@ -9,6 +9,7 @@ import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
@@ -28,12 +29,16 @@ public class OrderWebController {
     @GetMapping("/")
     public String dashboard(
             @RequestParam(name = "created", required = false) UUID createdOrderId,
+            @RequestParam(name = "retried", required = false) UUID retriedOrderId,
+            @RequestParam(name = "retriedAll", required = false) Integer retriedAllCount,
             Model model
     ) {
         if (!model.containsAttribute("orderForm")) {
             model.addAttribute("orderForm", new CreateOrderForm());
         }
-        model.addAttribute("createdOrderId", createdOrderId);
+        model.addAttribute("createdOrder", createdOrderId == null ? null : orderService.get(createdOrderId));
+        model.addAttribute("retriedOrder", retriedOrderId == null ? null : orderService.get(retriedOrderId));
+        model.addAttribute("retriedAllCount", retriedAllCount);
         addDashboardData(model);
         return "orders";
     }
@@ -55,13 +60,24 @@ public class OrderWebController {
             redirectAttributes.addAttribute("created", order.id());
             return "redirect:/";
         } catch (RuntimeException ex) {
-            model.addAttribute(
-                    "integrationError",
-                    "The order could not be accepted. Review how the application handles Pricing API failures."
-            );
+            model.addAttribute("integrationError", "Unexpected internal error. The order was not stored.");
             addDashboardData(model);
             return "orders";
         }
+    }
+
+    @PostMapping("/ui/orders/{id}/retry")
+    public String retryPricing(@PathVariable UUID id, RedirectAttributes redirectAttributes) {
+        Order order = orderService.retryPricing(id);
+        redirectAttributes.addAttribute("retried", order.id());
+        return "redirect:/";
+    }
+
+    @PostMapping("/ui/orders/retry-pending")
+    public String retryAllPending(RedirectAttributes redirectAttributes) {
+        List<Order> retried = orderService.retryAllPending();
+        redirectAttributes.addAttribute("retriedAll", retried.size());
+        return "redirect:/";
     }
 
     private void addDashboardData(Model model) {
@@ -69,18 +85,19 @@ public class OrderWebController {
                 .sorted(Comparator.comparing(Order::createdAt).reversed())
                 .toList();
 
-        long confirmed = orders.stream()
-                .filter(order -> order.status() == OrderStatus.CONFIRMED)
-                .count();
-        long awaitingAttention = orders.size() - confirmed;
-        long withoutPrice = orders.stream()
-                .filter(order -> order.unitPrice() == null)
-                .count();
+        long priced = countOf(orders, OrderStatus.CONFIRMED);
+        long awaiting = countOf(orders, OrderStatus.PENDING_PRICE);
+        long attention = countOf(orders, OrderStatus.PRICING_FAILED);
 
         model.addAttribute("orders", orders);
         model.addAttribute("orderCount", orders.size());
-        model.addAttribute("confirmedCount", confirmed);
-        model.addAttribute("attentionCount", awaitingAttention);
-        model.addAttribute("unpricedCount", withoutPrice);
+        model.addAttribute("pricedCount", priced);
+        model.addAttribute("awaitingCount", awaiting);
+        model.addAttribute("attentionCount", attention);
+        model.addAttribute("hasPending", awaiting > 0);
+    }
+
+    private static long countOf(List<Order> orders, OrderStatus status) {
+        return orders.stream().filter(order -> order.status() == status).count();
     }
 }

@@ -2,6 +2,7 @@ package com.tsystems.challenge.orders.dto;
 
 import com.tsystems.challenge.orders.domain.Order;
 import com.tsystems.challenge.orders.domain.OrderStatus;
+import com.tsystems.challenge.orders.domain.PricingFailure;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -17,7 +18,8 @@ public record OrderResponse(
         BigDecimal unitPrice,
         BigDecimal totalPrice,
         OrderStatus status,
-        Instant createdAt
+        Instant createdAt,
+        PricingFailure pricingFailure
 ) {
     public static OrderResponse from(Order order) {
         return new OrderResponse(
@@ -30,7 +32,8 @@ public record OrderResponse(
                 order.unitPrice(),
                 order.totalPrice(),
                 order.status(),
-                order.createdAt()
+                order.createdAt(),
+                order.pricingFailure()
         );
     }
 }

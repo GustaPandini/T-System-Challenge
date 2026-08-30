@@ -13,9 +13,4 @@ public class ApiExceptionHandler {
     ProblemDetail handleNotFound(OrderNotFoundException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
     }
-
-    @ExceptionHandler(IllegalArgumentException.class)
-    ProblemDetail handleBadRequest(IllegalArgumentException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-    }
 }

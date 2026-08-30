@@ -354,3 +354,70 @@ th {
         width: 100%;
     }
 }
+
+
+.status-failed {
+    border-color: #8a1c1c;
+    background: #fdecec;
+    color: #8a1c1c;
+}
+
+.alert-warning {
+    border-color: #d9b25f;
+    background: #fff8e8;
+}
+
+.state-cell {
+    min-width: 17rem;
+}
+
+.state-note {
+    margin: 0.4rem 0 0;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: #4b5865;
+}
+
+.tech-detail {
+    margin-top: 0.5rem;
+    font-size: 0.78rem;
+}
+
+.tech-detail summary {
+    cursor: pointer;
+    color: #4b5865;
+    font-weight: 700;
+}
+
+.tech-detail dl {
+    margin: 0.4rem 0 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.15rem 0.6rem;
+}
+
+.tech-detail dt {
+    color: #6b7280;
+    font-weight: 700;
+}
+
+.tech-detail dd {
+    margin: 0;
+    word-break: break-word;
+}
+
+.table-caption {
+    caption-side: top;
+    padding-bottom: 0.6rem;
+    text-align: left;
+    font-size: 0.8rem;
+    color: #6b7280;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+    outline: 3px solid #0b6bcb;
+    outline-offset: 2px;
+}

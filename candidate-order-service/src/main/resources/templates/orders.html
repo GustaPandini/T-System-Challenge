@@ -12,7 +12,7 @@
         <div>
             <p class="eyebrow">T-Systems developer challenge</p>
             <h1>International Order Service</h1>
-            <p class="subtitle">Create orders and observe how pricing affects their state.</p>
+            <p class="subtitle">Orders are stored before pricing is attempted, so an outage never loses one.</p>
         </div>
         <form method="get" action="/" class="refresh-form">
             <button class="button button-secondary" type="submit">Refresh orders</button>
@@ -29,15 +29,46 @@
             </div>
         </div>
 
-        <div class="alert alert-success" th:if="${createdOrderId != null}" role="status">
-            <strong>Order accepted.</strong>
-            Stable order ID:
-            <code th:text="${createdOrderId}">00000000-0000-0000-0000-000000000000</code>
+        <div th:if="${createdOrder != null}">
+            <div class="alert alert-success" th:if="${createdOrder.status.name() == 'CONFIRMED'}" role="status">
+                <strong>Order confirmed and priced.</strong>
+                Order ID: <code th:text="${createdOrder.id}">00000000-0000-0000-0000-000000000000</code>
+            </div>
+            <div class="alert alert-warning" th:if="${createdOrder.status.name() == 'PENDING_PRICE'}" role="status">
+                <strong>Order accepted, not priced yet.</strong>
+                It is stored under the ID below and <strong>must not be submitted again</strong>.
+                Use <em>Retry pricing</em> in the table when the provider is back.
+                Order ID: <code th:text="${createdOrder.id}">00000000-0000-0000-0000-000000000000</code>
+            </div>
+            <div class="alert alert-error" th:if="${createdOrder.status.name() == 'PRICING_FAILED'}" role="alert">
+                <strong>Order accepted, but it cannot be priced.</strong>
+                It is stored under the ID below. See the reason in the table.
+                Order ID: <code th:text="${createdOrder.id}">00000000-0000-0000-0000-000000000000</code>
+            </div>
+        </div>
+
+        <div th:if="${retriedOrder != null}">
+            <div class="alert alert-success" th:if="${retriedOrder.status.name() == 'CONFIRMED'}" role="status">
+                <strong>Pricing recovered.</strong> The order is now priced and confirmed.
+            </div>
+            <div class="alert alert-warning" th:if="${retriedOrder.status.name() == 'PENDING_PRICE'}" role="status">
+                <strong>Still not priced.</strong>
+                The provider did not return a usable price. The order is unchanged and can be retried again.
+            </div>
+            <div class="alert alert-error" th:if="${retriedOrder.status.name() == 'PRICING_FAILED'}" role="alert">
+                <strong>This order cannot be priced automatically.</strong>
+                Retrying will not help. See the reason in the table.
+            </div>
+        </div>
+
+        <div class="alert alert-success" th:if="${retriedAllCount != null}" role="status">
+            <strong>Retried every pending order.</strong>
+            <span th:text="|${retriedAllCount} order(s) were re-sent to the provider. Check their state below.|">0</span>
         </div>
 
         <div class="alert alert-error" th:if="${integrationError != null}" role="alert">
             <strong>Order was not accepted.</strong>
-            <span th:text="${integrationError}">The order could not be accepted.</span>
+            <span th:text="${integrationError}">Unexpected internal error.</span>
         </div>
 
         <form class="order-form" method="post" th:action="@{/ui/orders}" th:object="${orderForm}">
@@ -86,16 +117,16 @@
             <strong class="metric-value" th:text="${orderCount}">0</strong>
         </article>
         <article class="metric">
-            <span class="metric-label">Confirmed</span>
-            <strong class="metric-value" th:text="${confirmedCount}">0</strong>
+            <span class="metric-label">Priced</span>
+            <strong class="metric-value" th:text="${pricedCount}">0</strong>
+        </article>
+        <article class="metric">
+            <span class="metric-label">Awaiting price</span>
+            <strong class="metric-value" th:text="${awaitingCount}">0</strong>
         </article>
         <article class="metric">
             <span class="metric-label">Needs attention</span>
             <strong class="metric-value" th:text="${attentionCount}">0</strong>
-        </article>
-        <article class="metric">
-            <span class="metric-label">Without price</span>
-            <strong class="metric-value" th:text="${unpricedCount}">0</strong>
         </article>
     </aside>
 
@@ -104,8 +135,15 @@
             <div>
                 <p class="eyebrow">Operational view</p>
                 <h2 id="orders-heading">Orders</h2>
+                <p>
+                    <strong>Awaiting price</strong> means the provider could not be used yet &mdash; the order is
+                    safe and can be retried from here. <strong>Needs attention</strong> means retrying will not
+                    help; each row explains why and who can act on it.
+                </p>
             </div>
-            <p>Use this view to make pricing state and recovery behavior understandable to a store or support user.</p>
+            <form th:if="${hasPending}" method="post" th:action="@{/ui/orders/retry-pending}">
+                <button class="button button-secondary" type="submit">Retry all pending</button>
+            </form>
         </div>
 
         <div class="empty-state" th:if="${#lists.isEmpty(orders)}">
@@ -115,9 +153,10 @@
 
         <div class="table-wrap" th:unless="${#lists.isEmpty(orders)}">
             <table>
+                <caption class="table-caption">Every accepted order and its pricing state.</caption>
                 <thead>
                 <tr>
-                    <th scope="col">Status</th>
+                    <th scope="col">Pricing state</th>
                     <th scope="col">Order</th>
                     <th scope="col">Customer</th>
                     <th scope="col">Product</th>
@@ -126,13 +165,51 @@
                     <th scope="col">Unit price</th>
                     <th scope="col">Total</th>
                     <th scope="col">Created</th>
+                    <th scope="col">Recovery</th>
                 </tr>
                 </thead>
                 <tbody>
                 <tr th:each="order : ${orders}">
-                    <td>
-                        <span class="status" th:classappend="${order.status.name() == 'CONFIRMED'} ? ' status-confirmed' : ' status-attention'"
-                              th:text="${order.status}">CONFIRMED</span>
+                    <td class="state-cell">
+                        <span class="status status-confirmed"
+                              th:if="${order.status.name() == 'CONFIRMED'}">Priced</span>
+                        <span class="status status-attention"
+                              th:if="${order.status.name() == 'PENDING_PRICE'}">Awaiting price</span>
+                        <span class="status status-failed"
+                              th:if="${order.status.name() == 'PRICING_FAILED'}">Needs attention</span>
+
+                        <div th:if="${order.pricingFailure != null}">
+                            <p class="state-note" th:switch="${order.pricingFailure.category.name()}">
+                                <span th:case="'ORDER_DATA'">The provider does not accept this product or market.
+                                    Check the order data and create a corrected order.</span>
+                                <span th:case="'PROVIDER_DOWN'">The pricing provider could not be reached.
+                                    Nothing is wrong with this order &mdash; try again in a moment.</span>
+                                <span th:case="'PROVIDER_RESPONSE'">The provider replied with a price we cannot use.
+                                    This will not fix itself &mdash; contact support with the order ID.</span>
+                            </p>
+
+                            <p class="state-note">
+                                <span th:text="|Failed attempts: ${order.pricingFailure.attempts}.|">Failed attempts: 1.</span>
+                                <span th:if="${order.pricingFailure.retryAfter != null}"
+                                      th:text="|The provider asked to wait ${order.pricingFailure.retryAfter.seconds}s.|">
+                                    The provider asked to wait 2s.</span>
+                            </p>
+
+                            <details class="tech-detail">
+                                <summary>Technical detail (support)</summary>
+                                <dl>
+                                    <dt>Reason</dt>
+                                    <dd th:text="${order.pricingFailure.reason}">PROVIDER_UNAVAILABLE</dd>
+                                    <dt>Provider request ID</dt>
+                                    <dd th:text="${order.pricingFailure.providerRequestId} ?: '—'">req-a3f91c</dd>
+                                    <dt>Last attempt</dt>
+                                    <dd><time th:datetime="${order.pricingFailure.lastAttemptAt}"
+                                              th:text="${order.pricingFailure.lastAttemptAt}">2026-08-14T10:00:00Z</time></dd>
+                                    <dt>Message</dt>
+                                    <dd th:text="${order.pricingFailure.detail}">HTTP 503</dd>
+                                </dl>
+                            </details>
+                        </div>
                     </td>
                     <td><code class="order-id" th:text="${order.id}">order-id</code></td>
                     <td th:text="${order.customerId}">customer-42</td>
@@ -144,10 +221,20 @@
                         <span class="not-available" th:unless="${order.unitPrice != null}">Not priced</span>
                     </td>
                     <td>
-                        <span th:if="${order.totalPrice != null}" th:text="|${order.totalPrice} ${order.currency}|">19.99 EUR</span>
-                        <span class="not-available" th:unless="${order.totalPrice != null}">—</span>
+                        <span th:if="${order.totalPrice != null}" th:text="|${order.totalPrice} ${order.currency}|">39.98 EUR</span>
+                        <span class="not-available" th:unless="${order.totalPrice != null}">&mdash;</span>
                     </td>
                     <td><time th:datetime="${order.createdAt}" th:text="${order.createdAt}">2026-08-14T10:00:00Z</time></td>
+                    <td>
+                        <form th:if="${order.status.name() == 'PENDING_PRICE'}"
+                              method="post" th:action="@{/ui/orders/{id}/retry(id=${order.id})}">
+                            <button class="button button-secondary" type="submit">Retry pricing</button>
+                        </form>
+                        <span class="not-available"
+                              th:if="${order.status.name() == 'CONFIRMED'}">Not needed</span>
+                        <span class="not-available"
+                              th:if="${order.status.name() == 'PRICING_FAILED'}">Retrying will not help</span>
+                    </td>
                 </tr>
                 </tbody>
             </table>
